@@ -1,0 +1,55 @@
+def funcioncubo(numcub):
+    valor = numcub**3
+    print("El cubo de",numcub,"es",valor)
+    return None
+
+def funcionrepeticion(sub,gen):
+    subcadena=""
+    for elemento in sub:
+        subcadena+=elemento
+    cadgeneral=""
+    for elemento in gen:
+            cadgeneral+=elemento
+    repeticion=0
+    tamañosc=len(subcadena)
+    for i in range(len(cadgeneral)):
+        if cadgeneral[i:i+tamañosc]==subcadena:
+            repeticion+=1
+    if (repeticion > 0):
+        print("La subcadena se repite",repeticion, "veces. ")
+    else:
+        print("No existen repeticiones del patron en la cadena de caracteres.")
+    return None
+
+class l():
+    def __init__(self, valor, subarbol=[]):
+        self.valor = valor
+        self.hijos = subarbol
+
+def nodo(arbol):
+    print("Nodo Actual: [", arbol.valor, "]")
+    return arbol.valor
+
+def rama(arbol):
+    return arbol.hijos
+
+def buscador_camino(arbol, valor_a_encontrar):
+    camino = []
+    if nodo(arbol) == valor_a_encontrar:
+        camino.append([valor_a_encontrar])
+        print("Valor encontrado:", camino)
+    for b in rama(arbol):
+        camino = camino + [[nodo(arbol)] + path for path in buscador_camino(b, valor_a_encontrar)]
+        print("Rama al nodo: ",camino);
+    return camino
+
+
+funcioncubo(27)
+
+funcionrepeticion(('t','a','t'),('t','a','t','a','a','t','t','a','t'))
+
+buscador_camino(l(1, [l(6, [l(3), l(7, [l(9)]), l(5, [l(4)])]), l(8),l(2)]), 5)
+
+from sympy import *
+x, y= symbols('x y')
+print(expand (2 * (x + 1) * (y + 3)))
