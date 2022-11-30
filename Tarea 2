@@ -1,0 +1,18 @@
+import numpy as np
+n=20
+p=0
+adjacency_matrix = np.random.randint(0,9,(n,n))
+for i in range(len(adjacency_matrix)):
+    for n in range(len(adjacency_matrix)):
+        if n == i:
+            adjacency_matrix[i,n]=0
+        if adjacency_matrix[i,n]!=0 & adjacency_matrix[i,n]!=adjacency_matrix[n,i]:
+             p=np.random.randint(0,2)
+             if p==1:
+                 adjacency_matrix[i,n]=0
+             else:
+                adjacency_matrix[i,n]=adjacency_matrix[n,i]
+
+
+print(adjacency_matrix)
+print (tuple(tuple(i) for i in adjacency_matrix))
