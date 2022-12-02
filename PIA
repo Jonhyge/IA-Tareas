@@ -1,0 +1,485 @@
+import time
+
+class Accion:
+    def __init__(self, nombre):
+        self.nombre = nombre
+    
+    def __str__(self):
+        return self.nombre
+
+
+class Estado:
+    def __init__(self, nombre, acciones):
+        self.nombre = nombre
+        self.acciones = acciones 
+
+    def __str__(self):
+        return self.nombre
+
+
+class Problema:
+    def __init__(self, estado_inicial, estados_objetivos, acciones, costes = None, heuristicas = None):
+        self.estado_inicial = estado_inicial
+        self.estados_objetivos = estados_objetivos
+        self.acciones = acciones 
+        self.costes = costes 
+        self.heuristicas = heuristicas
+        self.infinito = 99999
+        if not self.costes:
+            self.costes = {}
+            for estado in self.acciones.keys():
+                self.costes[estado] = {}
+                for accion in self.acciones[estado].keys():
+                    self.costes[estado][accion] = 1
+        if not self.heuristicas:
+            self.heuristicas = {}
+            for estado in self.acciones.keys():
+                self.heuristicas[estado] = {}
+                for objetivo in self.estados_objetivos:
+                    self.heuristicas[estado][objetivo] = self.infinito
+
+    def __str__(self):
+        msg = "Estado Inicial: {0} -> Objetivos: {1}"
+        return msg.format(self.estado_inicial.nombre, self.estados_objetivos)
+    
+    def es_objetivo(self, estado):
+        return estado in self.estados_objetivos
+
+    def resultado(self, estado, accion):
+        if estado.nombre not in self.acciones.keys():
+            return None
+        acciones_estado = self.acciones[estado.nombre]
+        if accion.nombre not in acciones_estado.keys():
+            return None
+        return acciones_estado[accion.nombre]
+    
+    def coste_accion(self, estado, accion):
+        if estado.nombre not in self.costes.keys():
+            return self.infinito
+        costes_estado = self.costes[estado.nombre]
+        if accion.nombre not in costes_estado.keys():
+            return self.infinito
+        return costes_estado[accion.nombre]
+
+    def coste_camino(self, nodo):
+        total = 0
+        while nodo.padre:
+            total += self.coste_accion(nodo.padre.estado, nodo.accion)
+            nodo = nodo.padre
+        return total 
+
+class Nodo: 
+    def __init__(self, estado, accion = None, acciones = None, padre = None):
+        self.estado = estado
+        self.accion = accion
+        self.acciones = acciones
+        self.padre = padre
+        self.hijos = []
+        self.coste = 0
+        self.heuristicas = {}
+        self.valores = {}
+        self.alfa = 0
+        self.beta = 0
+
+    def __str__(self):
+        return self.estado.nombre
+
+    def expandir(self, problema):
+        self.hijos = []
+        if not self.acciones:
+            if self.estado.nombre not in problema.acciones.keys():
+                return self.hijos
+            self.acciones = problema.acciones[self.estado.nombre]
+        for accion in self.acciones.keys():
+            accion_hijo = Accion(accion)
+            nuevo_estado = problema.resultado(self.estado, accion_hijo)
+            acciones_nuevo = {}
+            if nuevo_estado.nombre in problema.acciones.keys():
+                acciones_nuevo = problema.acciones[nuevo_estado.nombre]
+            hijo = Nodo(nuevo_estado, accion_hijo, acciones_nuevo, self)
+            coste = self.padre.coste if self.padre else 0
+            coste += problema.coste_accion(self.estado, accion_hijo)
+            hijo.coste = coste
+            hijo.heuristicas = problema.heuristicas[hijo.estado.nombre]
+            hijo.valores = {estado: heuristica + hijo.coste for estado, heuristica in hijo.heuristicas.items()}
+            self.hijos.append(hijo)
+        return self.hijos
+
+    def hijo_mejor(self, problema, metrica = 'valor', criterio = 'menor'):
+        if not self.hijos:
+            return None
+        mejor = self.hijos[0]
+        for hijo in self.hijos:
+            for objetivo in problema.estados_objetivos:
+                if metrica == 'valor':
+                    valor_hijo = hijo.valores[objetivo.nombre]
+                    valor_mejor = mejor.valores[objetivo.nombre]
+                    if (criterio == 'menor' and valor_hijo < valor_mejor):
+                        mejor = hijo
+                    elif (criterio == 'mayor' and valor_hijo > valor_mejor):
+                        mejor = hijo 
+                elif metrica == 'heuristica':
+                    heuristica_hijo = hijo.heuristicas[objetivo.nombre]
+                    heuristica_mejor = mejor.heuristicas[objetivo.nombre]
+                    if (criterio == 'menor' and heuristica_hijo < heuristica_mejor):
+                        mejor = hijo 
+                    elif (criterio == 'mayor' and heuristica_hijo > heuristica_mejor): 
+                        mejor = hijo 
+                elif metrica == 'coste':
+                    coste_camino_hijo = problema.coste_camino(hijo)
+                    coste_camino_mejor = problema.coste_camino(mejor)
+                    if (criterio == 'menor' and coste_camino_hijo < coste_camino_mejor):
+                        mejor = hijo
+                    elif (criterio == 'mayor' and coste_camino_hijo > coste_camino_mejor):
+                        mejor = hijo 
+                elif metrica == 'alfa':
+                    if (criterio == 'menor' and hijo.alfa < mejor.alfa):
+                        mejor = hijo 
+                    elif (criterio == 'mayor' and hijo.alfa > mejor.alfa):
+                        mejor = hijo
+                elif metrica == 'beta':
+                    if (criterio == 'menor' and hijo.beta < mejor.beta):
+                        mejor = hijo 
+                    elif (criterio == 'mayor' and hijo.beta > mejor.beta):
+                        mejor = hijo
+        return mejor
+
+def coste_unifirme(problema):
+    raiz = crea_nodo_raiz(problema)
+    frontera = [raiz,]
+    explorados = set()
+    while True:
+        if not frontera:
+            return None
+        nodo = frontera.pop(0)
+        if problema.es_objetivo(nodo.estado):
+            return nodo
+        explorados.add(nodo.estado)
+        if not nodo.acciones:
+            continue
+        for nombre_accion in nodo.acciones.keys():
+            accion = Accion(nombre_accion)
+            hijo = crea_nodo_hijo(problema, nodo, accion)
+            estados_frontera = [nodo.estado for nodo in frontera]
+            if (hijo.estado not in explorados and hijo.estado not in estados_frontera):
+                frontera.append(hijo)
+            else: 
+                buscar = [nodo for nodo in frontera if nodo.estado == hijo.estado]
+                if buscar:
+                    if hijo.coste < buscar[0].coste:
+                        indice = frontera.index(buscar[0])
+                        frontera[indice] = hijo
+            frontera.sort(key=lambda nodo: nodo.coste)
+
+
+def crea_nodo_raiz(problema):
+    estado_raiz = problema.estado_inicial
+    acciones_raiz = {}
+    if estado_raiz.nombre in problema.acciones.keys():
+        acciones_raiz = problema.acciones[estado_raiz.nombre]
+    raiz = Nodo(estado_raiz, None, acciones_raiz, None)
+    raiz.coste = 0
+    return raiz
+
+
+def crea_nodo_hijo(problema, padre, accion):
+    nuevo_estado = problema.resultado(padre.estado, accion)
+    acciones_nuevo = {}
+    if nuevo_estado.nombre in problema.acciones.keys():
+        acciones_nuevo = problema.acciones[nuevo_estado.nombre]
+    hijo = Nodo(nuevo_estado, accion, acciones_nuevo, padre)
+    coste = padre.coste
+    coste += problema.coste_accion(padre.estado, accion)
+    hijo.coste = coste
+    padre.hijos.append(hijo)
+    return hijo
+
+
+def muestra_solucion(objetivo=None):
+    if not objetivo:
+        print("No hay solucion")
+        return 
+    nodo = objetivo
+    while nodo:
+        msg = "Estado: {0}, Coste Total: {1}"
+        estado = nodo.estado.nombre
+        coste_total = nodo.coste
+        print(msg.format(estado, coste_total))
+        if nodo.accion:
+            accion = nodo.accion.nombre
+            padre = nodo.padre.estado
+            coste = problema_resolver.coste_accion(padre, nodo.accion)
+            msg = "<--- {0} [{1}] ---"
+            print(msg.format(accion, coste))
+        nodo = nodo.padre
+
+if __name__ == "__main__":
+    accN = Accion('A')
+    accS = Accion('N')
+    accE = Accion('E')
+    accO = Accion('O')
+    accNE = Accion('NE')
+    accNO = Accion('NO')
+    accSE = Accion('SE')
+    accSO = Accion('SO')
+
+    santa_catarina = Estado('Santa_catarina', [accNE])
+    san_pedro = Estado('San_pedro', [accSO, accNO, accNE])
+    monterrey = Estado('Monterrey', [accNO, accNE, accE, accSE])
+    cadereyta = Estado('Cadereyta', [accO, accSO, accN])
+    san_nicolas = Estado('San_nicolas', [accN, accE, accSE])
+    guadalupe = Estado('Guadalupe', [accO, accSO, accNE])
+    juarez = Estado('Juarez', [accN, accSO])
+    pesqueria = Estado('Pesqueria', [accO, accS])
+    marin = Estado('Marin', [accO, accE])
+    apodaca = Estado('Apodaca', [accNO, accS, accE])
+    general_zuazua = Estado('General_zuazua', [accNO, accSO])
+    cienega = Estado('Cienega', [accSE, accNO, accO])
+    agualeguas = Estado('Agualeguas', [accO, accNO, accNE, accE])
+    cerralvo = Estado('Cerralvo', [accO, accE])
+    doctor_gonzalez = Estado('Doctor_gonzalez', [accO, accS])
+    salinas_victoria = Estado('Salinas_victoria', [accSO, accSE, accNE])
+    sabinas_hidalgo = Estado('Sabinas_hidalgo', [accSO, accSE])
+    vallecillo = Estado('Vallecillo', [accNO, accSO, accE])
+    nuevo_laredo = Estado ('Nuevo_laredo', [accO])
+
+    acciones = { 'Santa_catarina': {'NE': san_pedro},
+                 'San_pedro': {'SO': santa_catarina,
+                           'NO': monterrey,
+                           'NE': cadereyta},
+                 'Monterrey': {'NO': san_nicolas,
+                          'NE': guadalupe,
+                          'E': cadereyta,
+                          'SE': san_pedro},
+                 'Cadereyta': {'O': monterrey,
+                           'SO': san_pedro,
+                           'N': doctor_gonzalez},
+                 'San_nicolas': {'N': apodaca,
+                            'E': guadalupe,
+                            'SE': monterrey},
+                 'Guadalupe': {'O': san_nicolas,
+                            'SO': monterrey,
+                            'NE': juarez},
+                 'Juarez': {'N': pesqueria,
+                            'SO': guadalupe},
+                 'Pesqueria': {'O': marin,
+                            'S': juarez},
+                 'Marin': {'O': apodaca,
+                            'E': pesqueria},
+                 'Apodaca': {'NO': general_zuazua,
+                            'S': san_nicolas,
+                            'E': marin},
+                 'General_zuazua': {'NO': cienega,
+                            'SO': apodaca},
+                 'Cienega': {'SE': general_zuazua,
+                            'NO': salinas_victoria,
+                            'O': agualeguas},
+                 'Agualeguas': {'O': cienega,
+                            'NO': salinas_victoria,
+                            'NE': vallecillo,
+                            'E': cerralvo},
+                 'Cerralvo': {'O': agualeguas,
+                            'E': doctor_gonzalez},
+                 'Doctor_gonzalez': {'O': cerralvo,
+                            'S': cadereyta},
+                 'Salinas_victoria': {'SO': cienega,
+                         'SE': agualeguas,
+                         'NE': sabinas_hidalgo},
+                 'Sabinas_hidalgo': {'SO': salinas_victoria,
+                          'SE': vallecillo},
+                 'Vallecillo': {'NO': sabinas_hidalgo,
+                           'SO': agualeguas,
+                           'E': nuevo_laredo},
+                 'Nuevo_laredo': {'O': vallecillo}
+                }
+    costes = { 'Santa_catarina': {'NE': 42},
+                 'San_pedro': {'SO': 42,
+                           'NO': 21,
+                           'NE': 95},
+                 'Monterrey': {'NO': 88,
+                          'NE': 16,
+                          'E': 90,
+                          'SE': 21},
+                 'Cadereyta': {'O': 98,
+                           'SO': 95,
+                           'N': 133},
+                 'San_nicolas': {'N': 17,
+                            'E': 92,
+                            'SE': 88},
+                 'Guadalupe': {'O': 92,
+                            'SO': 16,
+                            'NE': 83},
+                 'Juarez': {'N': 8,
+                            'SO': 83},
+                 'Pesqueria': {'O': 59,
+                            'S': 8},
+                 'Marin': {'O': 71,
+                            'E': 59},
+                 'Apodaca': {'NO': 5,
+                            'S': 17,
+                            'E': 71},
+                 'General_zuazua': {'NO': 29,
+                            'SO': 5},
+                 'Cienega': {'SE': 29,
+                            'NO': 121,
+                            'O': 98},
+                 'Agualeguas': {'O': 98,
+                            'NO': 83,
+                            'NE': 57,
+                            'E': 82},
+                 'Cerralvo': {'O': 82,
+                            'E': 44},
+                 'Doctor_gonzalez': {'O': 44,
+                            'S': 133},
+                 'Salinas_victoria': {'SO': 121,
+                         'SE': 83,
+                         'NE': 11},
+                 'Sabinas_hidalgo': {'SO': 11,
+                          'SE': 36},
+                 'Vallecillo': {'NO': 36,
+                           'SO': 57,
+                           'E': 104},
+                 'Nuevo_laredo': {'O': 104}
+                }
+
+
+
+print('PIA - IA')
+ans = True
+while ans:
+    print("Opciones de movilidad de la ciudad")
+    print("""
+    1.Iniciar busqueda 
+    3.Salir
+    """)
+    ans=input("Seleccione una opcion: ")
+    if ans=="1":
+      
+      print("Usted se encuentra en: Santa_catarina")
+      #Nuevo_laredo
+      objetivo_1 = [nuevo_laredo]
+      problema_1 = Problema(santa_catarina, objetivo_1, acciones, costes)
+      #Pesqueria
+      objetivo_2 = [pesqueria]
+      problema_2 = Problema(santa_catarina, objetivo_2, acciones, costes)
+      #San_pedro
+      objetivo_3 = [san_pedro]
+      problema_3 = Problema(santa_catarina, objetivo_3, acciones, costes)
+      #Monterrey
+      objetivo_4 = [monterrey]
+      problema_4 = Problema(santa_catarina, objetivo_4, acciones, costes)
+      #Cadereyta
+      objetivo_5 = [cadereyta]
+      problema_5 = Problema(santa_catarina, objetivo_5, acciones, costes)
+      #San_nicolas
+      objetivo_6 = [san_nicolas]
+      problema_6 = Problema(santa_catarina, objetivo_6, acciones, costes)
+      #Guadalupe 
+      objetivo_7 = [guadalupe]
+      problema_7 = Problema(santa_catarina, objetivo_7, acciones, costes)
+      #Juarez 
+      objetivo_8 = [juarez]
+      problema_8 = Problema(santa_catarina, objetivo_8, acciones, costes)
+      #Marin
+      objetivo_9 = [marin]
+      problema_9 = Problema(santa_catarina, objetivo_9, acciones, costes)
+      #Apodaca
+      objetivo_10 = [apodaca]
+      problema_10 = Problema(santa_catarina, objetivo_10, acciones, costes)
+      #General_zuazua
+      objetivo_11 = [general_zuazua]
+      problema_11 = Problema(santa_catarina, objetivo_11, acciones, costes)
+      #Cienega
+      objetivo_12 = [cienega]
+      problema_12 = Problema(santa_catarina, objetivo_12, acciones, costes)
+      #Agualeguas
+      objetivo_13 = [agualeguas]
+      problema_13 = Problema(santa_catarina, objetivo_13, acciones, costes)
+      #Cerralvo
+      objetivo_14 = [cerralvo]
+      problema_14 = Problema(santa_catarina, objetivo_14, acciones, costes)
+      #Doctor_gonzalez
+      objetivo_15 = [doctor_gonzalez]
+      problema_15 = Problema(santa_catarina, objetivo_15, acciones, costes)
+      #Salinas_victoria
+      objetivo_16 = [salinas_victoria]
+      problema_16 = Problema(santa_catarina, objetivo_16, acciones, costes)
+      #Sabinas_hidalgo
+      objetivo_17 = [sabinas_hidalgo]
+      problema_17 = Problema(santa_catarina, objetivo_17, acciones, costes)
+      #Vallecillo
+      objetivo_18 = [vallecillo]
+      problema_18 = Problema(santa_catarina, objetivo_18, acciones, costes)
+
+
+      print("Destinos disponibles: ")
+      for i in acciones:
+        print(i)
+
+      destino=input("Elija su destino: ")
+      inicio = time.time() 
+      if destino == "nuevo_laredo":
+        problema_resolver = problema_1
+        solucion = coste_unifirme(problema_resolver)
+      elif destino == "pesqueria":
+        problema_resolver = problema_2
+        solucion = coste_unifirme(problema_resolver)
+      elif destino == "san_pedro":
+        problema_resolver = problema_3
+        solucion = coste_unifirme(problema_resolver)
+      elif destino == "monterrey":
+        problema_resolver = problema_4
+        solucion = coste_unifirme(problema_resolver)
+      elif destino == "cadereyta":
+        problema_resolver = problema_5
+        solucion = coste_unifirme(problema_resolver)
+      elif destino == "san_nicolas":
+        problema_resolver = problema_6
+        solucion = coste_unifirme(problema_resolver)
+      elif destino == "guadalupe":
+        problema_resolver = problema_7
+        solucion = coste_unifirme(problema_resolver)
+      elif destino == "juarez":
+        problema_resolver = problema_8
+        solucion = coste_unifirme(problema_resolver)
+      elif destino == "marin":
+        problema_resolver = problema_9
+        solucion = coste_unifirme(problema_resolver)
+      elif destino == "apodaca":
+        problema_resolver = problema_10
+        solucion = coste_unifirme(problema_resolver)
+      elif destino == "general_zuazua":
+        problema_resolver = problema_11
+        solucion = coste_unifirme(problema_resolver)
+      elif destino == "cienega":
+        problema_resolver = problema_12
+        solucion = coste_unifirme(problema_resolver)
+      elif destino == "agualeguas":
+        problema_resolver = problema_13
+        solucion = coste_unifirme(problema_resolver)
+      elif destino == "cerralvo":
+        problema_resolver = problema_14
+        solucion = coste_unifirme(problema_resolver)
+      elif destino == "doctor_gonzalez":
+        problema_resolver = problema_15
+        solucion = coste_unifirme(problema_resolver)
+      elif destino == "salinas_victoria":
+        problema_resolver = problema_16
+        solucion = coste_unifirme(problema_resolver)
+      elif destino == "sabinas_hidalgo":
+        problema_resolver = problema_17
+        solucion = coste_unifirme(problema_resolver)
+      elif destino == "vallecillo":
+        problema_resolver = problema_18
+        solucion = coste_unifirme(problema_resolver)
+      muestra_solucion(solucion)
+      fin = time.time() 
+      print(inicio)
+      print(fin)
+      print("Tiempo de ejecuccion:")
+      print (float(fin-inicio)) 
+    elif ans=="2":
+      print("\n ---")
+      ans = None
+    else:
+       print("\n Opcion invalida, intente de nuevo")
